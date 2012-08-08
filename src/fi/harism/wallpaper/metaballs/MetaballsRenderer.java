@@ -71,6 +71,10 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 			blob.mColor[0] = Color.red(color) / 255f;
 			blob.mColor[1] = Color.green(color) / 255f;
 			blob.mColor[2] = Color.blue(color) / 255f;
+
+			blob.mPositionTarget[0] = ((float) Math.random() * 2 - 1);
+			blob.mPositionTarget[1] = ((float) Math.random() * 2 - 1);
+
 			mBlobs.add(blob);
 		}
 	}
