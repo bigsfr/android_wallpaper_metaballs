@@ -219,6 +219,7 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		GLES20.glViewport(0, 0, mWidth, mHeight);
 
 		mShaderCopy.useProgram();
+		int uNoise = mShaderCopy.getHandle("uNoise");
 		aPosition = mShaderCopy.getHandle("aPosition");
 
 		GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -227,6 +228,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_BYTE, false, 0,
 				mBufferQuad);
 		GLES20.glEnableVertexAttribArray(aPosition);
+
+		GLES20.glUniform1f(uNoise, (time % 200) / 400f);
+
 		GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
 	}
 
