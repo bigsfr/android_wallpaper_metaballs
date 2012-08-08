@@ -63,20 +63,7 @@ public final class MetaballsService extends WallpaperService {
 
 		@Override
 		public void onTouchEvent(MotionEvent me) {
-			switch (me.getAction()) {
-			case MotionEvent.ACTION_DOWN:
-				mTouchX = me.getX();
-				mTouchY = me.getY();
-				break;
-			case MotionEvent.ACTION_MOVE:
-				float dx = me.getX() - mTouchX;
-				float dy = mTouchY - me.getY();
-
-				mTouchX = me.getX();
-				mTouchY = me.getY();
-
-				break;
-			}
+			mRenderer.onTouchEvent(me);
 		}
 
 		@Override

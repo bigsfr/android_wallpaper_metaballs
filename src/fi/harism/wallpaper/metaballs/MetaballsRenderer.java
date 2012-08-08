@@ -32,6 +32,8 @@ import android.opengl.GLSurfaceView;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.SparseArray;
+import android.view.MotionEvent;
 import android.widget.Toast;
 
 /**
@@ -39,9 +41,11 @@ import android.widget.Toast;
  */
 public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
+	private final int BLOB_COUNT = 20;
+
 	private final float[] mAspectRatio = new float[2];
 	private final Vector<Blob> mBlobs = new Vector<Blob>();
-	private final int mBlobsCount = 20;
+	private final SparseArray<Blob> mBlobsTouch = new SparseArray<Blob>(5);
 	private ByteBuffer mBufferQuad;
 	private Context mContext;
 	private final MetaballsFbo mFbo = new MetaballsFbo();
@@ -61,22 +65,24 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		mBufferQuad = ByteBuffer.allocateDirect(8);
 		mBufferQuad.put(QUAD).position(0);
 
-		final float[] hsv = { 0f, 1f, 1f };
-		for (int i = 0; i < mBlobsCount; ++i) {
+		for (int i = 0; i < BLOB_COUNT; ++i) {
 			Blob blob = new Blob();
-
-			hsv[0] = (float) (Math.random() * 360);
-			int color = Color.HSVToColor(hsv);
-
-			blob.mColor[0] = Color.red(color) / 255f;
-			blob.mColor[1] = Color.green(color) / 255f;
-			blob.mColor[2] = Color.blue(color) / 255f;
-
-			blob.mPositionTarget[0] = ((float) Math.random() * 2 - 1);
-			blob.mPositionTarget[1] = ((float) Math.random() * 2 - 1);
-
+			genRandBlob(blob);
 			mBlobs.add(blob);
 		}
+	}
+
+	private void genRandBlob(Blob blob) {
+		blob.mSizeTarget = ((float) Math.random() * 0.5f + 0.3f);
+		blob.mPositionTarget[0] = ((float) Math.random() * 2 - 1);
+		blob.mPositionTarget[1] = ((float) Math.random() * 2 - 1);
+
+		final float[] hsv = { (float) (Math.random() * 360), 1f, 1f };
+		int color = Color.HSVToColor(hsv);
+
+		blob.mColorTarget[0] = Color.red(color) / 255f;
+		blob.mColorTarget[1] = Color.green(color) / 255f;
+		blob.mColorTarget[2] = Color.blue(color) / 255f;
 	}
 
 	/**
@@ -116,8 +122,21 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
 				for (int i = 0; i < 2; ++i) {
 					blob.mPositionSource[i] = blob.mPositionTarget[i];
-					blob.mPositionTarget[i] = (float) (Math.random() * 2 - 1);
 				}
+				for (int i = 0; i < 3; ++i) {
+					blob.mColorSource[i] = blob.mColorTarget[i];
+				}
+				blob.mSizeSource = blob.mSizeTarget;
+
+				genRandBlob(blob);
+			}
+		}
+		for (int i = 0; i < mBlobsTouch.size();) {
+			Blob blob = mBlobsTouch.valueAt(i);
+			if (blob.mSizeTarget == 0f && blob.mTimeTarget < time) {
+				mBlobsTouch.remove(mBlobsTouch.keyAt(i));
+			} else {
+				++i;
 			}
 		}
 
@@ -151,8 +170,39 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 						+ (blob.mPositionTarget[i] - blob.mPositionSource[i])
 						* t;
 			}
+			for (int i = 0; i < 3; ++i) {
+				blob.mColor[i] = blob.mColorSource[i]
+						+ (blob.mColorTarget[i] - blob.mColorSource[i]) * t;
+			}
+			blob.mSize = blob.mSizeSource
+					+ (blob.mSizeTarget - blob.mSizeSource) * t;
 
-			matrix.setScale(mAspectRatio[0] * 0.5f, mAspectRatio[1] * 0.5f);
+			matrix.setScale(mAspectRatio[0] * blob.mSize, mAspectRatio[1]
+					* blob.mSize);
+			matrix.postTranslate(blob.mPosition[0], blob.mPosition[1]);
+			matrix.getValues(matrixValues);
+			GLES20.glUniformMatrix3fv(uModelViewM, 1, false, matrixValues, 0);
+
+			GLES20.glUniform3f(uColor, blob.mColor[0], blob.mColor[1],
+					blob.mColor[2]);
+
+			GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+		}
+
+		for (int i = 0; i < mBlobsTouch.size(); ++i) {
+			Blob blob = mBlobsTouch.valueAt(i);
+
+			float t = (float) (time - blob.mTimeSource)
+					/ (blob.mTimeTarget - blob.mTimeSource);
+			if (t > 1.0f) {
+				t = 1.0f;
+			}
+			t = t * t * (3 - 2 * t);
+			blob.mSize = blob.mSizeSource
+					+ (blob.mSizeTarget - blob.mSizeSource) * t;
+
+			matrix.setScale(mAspectRatio[0] * blob.mSize, mAspectRatio[1]
+					* blob.mSize);
 			matrix.postTranslate(blob.mPosition[0], blob.mPosition[1]);
 			matrix.getValues(matrixValues);
 			GLES20.glUniformMatrix3fv(uModelViewM, 1, false, matrixValues, 0);
@@ -221,6 +271,49 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		}
 	}
 
+	public void onTouchEvent(MotionEvent me) {
+		switch (me.getActionMasked()) {
+		case MotionEvent.ACTION_DOWN:
+		case MotionEvent.ACTION_POINTER_DOWN: {
+			Blob blob = new Blob();
+			genRandBlob(blob);
+
+			blob.mSizeSource = 0.0f;
+			blob.mSizeTarget = 1.0f;
+			blob.mPosition[0] = ((me.getX(me.getActionIndex()) * 2) / mWidth) - 1f;
+			blob.mPosition[1] = 1f - ((me.getY(me.getActionIndex()) * 2) / mHeight);
+			for (int i = 0; i < 3; ++i) {
+				blob.mColor[i] = blob.mColorTarget[i];
+			}
+
+			blob.mTimeSource = SystemClock.uptimeMillis();
+			blob.mTimeTarget = blob.mTimeSource + 300;
+
+			mBlobsTouch.put(me.getPointerId(me.getActionIndex()), blob);
+			break;
+
+		}
+		case MotionEvent.ACTION_UP:
+		case MotionEvent.ACTION_POINTER_UP: {
+			Blob blob = mBlobsTouch.get(me.getPointerId(me.getActionIndex()));
+			blob.mSizeSource = blob.mSize;
+			blob.mSizeTarget = 0f;
+
+			blob.mTimeSource = SystemClock.uptimeMillis();
+			blob.mTimeTarget = blob.mTimeSource + 300;
+			break;
+		}
+		case MotionEvent.ACTION_MOVE: {
+			for (int i = 0; i < me.getPointerCount(); ++i) {
+				Blob blob = mBlobsTouch.get(me.getPointerId(i));
+				blob.mPosition[0] = ((me.getX(i) * 2) / mWidth) - 1f;
+				blob.mPosition[1] = 1f - ((me.getY(i) * 2) / mHeight);
+			}
+			break;
+		}
+		}
+	}
+
 	/**
 	 * Shows Toast on screen with given message.
 	 */
@@ -235,9 +328,14 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
 	private class Blob {
 		public final float[] mColor = new float[3];
+		public final float[] mColorSource = new float[3];
+		public final float[] mColorTarget = new float[3];
 		public final float[] mPosition = new float[2];
 		public final float[] mPositionSource = new float[2];
 		public final float[] mPositionTarget = new float[2];
+		public float mSize;
+		public float mSizeSource;
+		public float mSizeTarget;
 		public long mTimeSource;
 		public long mTimeTarget;
 	}
