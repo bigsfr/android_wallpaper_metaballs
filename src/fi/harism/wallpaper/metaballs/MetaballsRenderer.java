@@ -41,11 +41,15 @@ import android.widget.Toast;
  */
 public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
+	// Number of automated blobs.
 	private final int BLOB_COUNT = 20;
-
+	// Screen aspect ratio.
 	private final float[] mAspectRatio = new float[2];
-	private final Vector<Blob> mBlobs = new Vector<Blob>();
-	private final SparseArray<Blob> mBlobsTouch = new SparseArray<Blob>(5);
+	// Automated blobs.
+	private final Vector<StructBlob> mBlobs = new Vector<StructBlob>();
+	// Touch event blobs.
+	private final SparseArray<StructBlob> mBlobsTouch = new SparseArray<StructBlob>(
+			5);
 	private ByteBuffer mBufferQuad;
 	private Context mContext;
 	private final MetaballsFbo mFbo = new MetaballsFbo();
@@ -65,14 +69,18 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		mBufferQuad = ByteBuffer.allocateDirect(8);
 		mBufferQuad.put(QUAD).position(0);
 
+		// Initialize blobs.
 		for (int i = 0; i < BLOB_COUNT; ++i) {
-			Blob blob = new Blob();
+			StructBlob blob = new StructBlob();
 			genRandBlob(blob);
 			mBlobs.add(blob);
 		}
 	}
 
-	private void genRandBlob(Blob blob) {
+	/**
+	 * Generates random blob values.
+	 */
+	private void genRandBlob(StructBlob blob) {
 		blob.mSizeTarget = ((float) Math.random() * 0.5f + 0.3f);
 		blob.mPositionTarget[0] = ((float) Math.random() * 2 - 1);
 		blob.mPositionTarget[1] = ((float) Math.random() * 2 - 1);
@@ -115,7 +123,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		GLES20.glDisable(GLES20.GL_CULL_FACE);
 
 		long time = SystemClock.uptimeMillis();
-		for (Blob blob : mBlobs) {
+
+		// Check automated blob animation times.
+		for (StructBlob blob : mBlobs) {
 			if (blob.mTimeTarget < time) {
 				blob.mTimeSource = time;
 				blob.mTimeTarget = time + 8000 + (long) (Math.random() * 4000);
@@ -131,8 +141,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 				genRandBlob(blob);
 			}
 		}
+		// Check touch blob animation times.
 		for (int i = 0; i < mBlobsTouch.size();) {
-			Blob blob = mBlobsTouch.valueAt(i);
+			StructBlob blob = mBlobsTouch.valueAt(i);
 			if (blob.mSizeTarget == 0f && blob.mTimeTarget < time) {
 				mBlobsTouch.remove(mBlobsTouch.keyAt(i));
 			} else {
@@ -140,6 +151,7 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 			}
 		}
 
+		// Render blobs to offscreen buffer.
 		mShaderBlob.useProgram();
 		int uModelViewM = mShaderBlob.getHandle("uModelViewM");
 		int uColor = mShaderBlob.getHandle("uColor");
@@ -161,7 +173,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
 		final Matrix matrix = new Matrix();
 		final float[] matrixValues = new float[9];
-		for (Blob blob : mBlobs) {
+
+		// Render automated blobs.
+		for (StructBlob blob : mBlobs) {
 			float t = (float) (time - blob.mTimeSource)
 					/ (blob.mTimeTarget - blob.mTimeSource);
 			t = t * t * (3 - 2 * t);
@@ -189,8 +203,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 			GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
 		}
 
+		// Render touch event blobs.
 		for (int i = 0; i < mBlobsTouch.size(); ++i) {
-			Blob blob = mBlobsTouch.valueAt(i);
+			StructBlob blob = mBlobsTouch.valueAt(i);
 
 			float t = (float) (time - blob.mTimeSource)
 					/ (blob.mTimeTarget - blob.mTimeSource);
@@ -198,6 +213,7 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 				t = 1.0f;
 			}
 			t = t * t * (3 - 2 * t);
+
 			blob.mSize = blob.mSizeSource
 					+ (blob.mSizeTarget - blob.mSizeSource) * t;
 
@@ -215,6 +231,7 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 
 		GLES20.glDisable(GLES20.GL_BLEND);
 
+		// Copy offscreen buffer to screen.
 		GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 		GLES20.glViewport(0, 0, mWidth, mHeight);
 
@@ -279,7 +296,8 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		switch (me.getActionMasked()) {
 		case MotionEvent.ACTION_DOWN:
 		case MotionEvent.ACTION_POINTER_DOWN: {
-			Blob blob = new Blob();
+			// On touch down event generate new touch blob.
+			StructBlob blob = new StructBlob();
 			genRandBlob(blob);
 
 			blob.mSizeSource = 0.0f;
@@ -299,7 +317,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		}
 		case MotionEvent.ACTION_UP:
 		case MotionEvent.ACTION_POINTER_UP: {
-			Blob blob = mBlobsTouch.get(me.getPointerId(me.getActionIndex()));
+			// On touch up event mark blob for removal.
+			StructBlob blob = mBlobsTouch.get(me.getPointerId(me
+					.getActionIndex()));
 			blob.mSizeSource = blob.mSize;
 			blob.mSizeTarget = 0f;
 
@@ -308,8 +328,9 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 			break;
 		}
 		case MotionEvent.ACTION_MOVE: {
+			// On touch move event update touch blob positions.
 			for (int i = 0; i < me.getPointerCount(); ++i) {
-				Blob blob = mBlobsTouch.get(me.getPointerId(i));
+				StructBlob blob = mBlobsTouch.get(me.getPointerId(i));
 				blob.mPosition[0] = ((me.getX(i) * 2) / mWidth) - 1f;
 				blob.mPosition[1] = 1f - ((me.getY(i) * 2) / mHeight);
 			}
@@ -330,7 +351,10 @@ public final class MetaballsRenderer implements GLSurfaceView.Renderer {
 		});
 	}
 
-	private class Blob {
+	/**
+	 * Private blob structure class.
+	 */
+	private class StructBlob {
 		public final float[] mColor = new float[3];
 		public final float[] mColorSource = new float[3];
 		public final float[] mColorTarget = new float[3];

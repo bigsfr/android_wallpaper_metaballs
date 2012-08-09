@@ -34,7 +34,6 @@ public final class MetaballsService extends WallpaperService {
 	private final class WallpaperEngine extends Engine {
 
 		private MetaballsRenderer mRenderer;
-		private float mTouchX, mTouchY;
 		private WallpaperSurfaceView mWallpaperSurfaceView;
 
 		@Override
